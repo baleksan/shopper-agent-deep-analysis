@@ -4,6 +4,7 @@ label: Anomaly detection (errors, retry loops, latency spikes, stuck states)
 description: Find errors, retry loops, latency spikes, stuck states. Markdown report.
 output: markdown
 order: 10
+projection: time,op,status,requestId,latency,query,cache,errors_context
 upstream:
   repo: baleksan/obs-hub
   branch: main

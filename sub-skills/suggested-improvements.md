@@ -4,6 +4,7 @@ label: Suggested improvements (P0/P1/P2 experiments)
 description: Synthesize findings across quality, latency, and other aspects into a prioritized backlog of improvements framed as experiments (hypothesis, change, metrics, exit criteria).
 output: markdown
 order: 35
+projection: time,op,status,requestId,latency,query,product_titles,followup_meta,scapi_meta,cache
 tags: [synthesis, experiments, backlog]
 ---
 

@@ -4,6 +4,7 @@ label: Search quality (ESCI, NDCG, follow-up suggestions)
 description: ESCI relevance scoring + NDCG@5/@10 + follow-up grading. Markdown.
 output: markdown
 order: 40
+projection: time,op,status,query,product_titles,followup_meta,scapi_meta
 upstream:
   repo: baleksan/obs-hub
   branch: main

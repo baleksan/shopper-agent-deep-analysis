@@ -48,6 +48,7 @@ upstream:                        # optional — refresh script source
 | `requires_stage` | list of stages | If set, the sub-skill only appears when the user picked one of these stages (e.g. `[scrt2, e2e]` for an SCRT2-specific analysis). Default: shown for all stages. |
 | `tags` | list of strings | Free-form tags; not used by the menu but useful for grouping later. |
 | `html_eligible` | boolean | When `false`, the parent skill refuses to render this sub-skill's output as a shareable HTML report (Step 9). Default: `true`. Set to `false` for sub-skills that are only meaningful as raw chat output. |
+| `projection` | comma-separated tags | **Required for performance.** Which fields the orchestrator should keep when slimming the cached Splunk rows for this sub-skill's LLM input. Default if missing: full row (slow). See `scripts/project_rows.py` for the available tags (`time`, `op`, `status`, `requestId`, `latency`, `query`, `product_titles`, `product_full`, `followup_meta`, `scapi_meta`, `cache`, `site`, `errors_context`). Pick the minimum set that the analysis needs — fewer tags = faster LLM. |
 
 ## Naming
 

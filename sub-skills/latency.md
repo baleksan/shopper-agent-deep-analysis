@@ -4,6 +4,7 @@ label: Per-step latency + slowdown analysis
 description: Per-step duration table, slowdowns, missing/skipped steps, root causes.
 output: markdown
 order: 30
+projection: time,op,status,requestId,latency,cache
 upstream:
   repo: baleksan/obs-hub
   branch: main

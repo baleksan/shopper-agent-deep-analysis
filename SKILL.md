@@ -184,6 +184,75 @@ Each turn lands at ~5–6 seconds, dominated by SCAPI. …
 (menu — never wrapped)
 ````
 
+## 🚀 LLM speed (always apply)
+
+The LLM is the dominant cost — typically 80-95% of `total` time. Three
+levers, all accuracy-neutral when applied as specified.
+
+### 1. Input projection (mandatory)
+
+The cached `<sessionId>_raw.json` rows include the full SCAPI
+`ProductSearchResponse` (image groups, prices, URLs). For most
+analyses, those bytes are noise. Each sub-skill declares a
+`projection:` tag list in its frontmatter; the orchestrator runs
+`scripts/project_rows.py` to slim the rows before sending them to the
+LLM.
+
+In Step 5 (apply prompt), **always project before building the LLM
+call**:
+
+```bash
+python3 ~/.claude/skills/shopper-agent-obs-hub-analyze/scripts/project_rows.py \
+  --rows-file=.agents/artifacts/<sessionId>_raw.json \
+  --include="<projection from sub-skill frontmatter>" \
+  --out=.agents/artifacts/<sessionId>_<analysisId>_input.txt
+```
+
+Then feed `_input.txt` (one row per line, projected fields only) to
+the LLM as the user message. Typical reduction: **150-300x** for
+non-quality sub-skills (691 KB → 2-4 KB).
+
+If a sub-skill omits `projection:`, fall back to the full raw rows
+(slow). Warn in chat that this is happening so the sub-skill author
+can fix it.
+
+**Don't** project for `quality` if the analysis specifically needs
+full image / price metadata; the `product_full` tag is available
+when needed (rare).
+
+### 2. Prompt caching (when API allows)
+
+Anthropic's API caches stable prompt prefixes. Structure the LLM
+call so the **sub-skill prompt body** (which doesn't change across
+sessions) is the cacheable system block, and only the per-session
+**rows + metadata** are the variable user message:
+
+```
+system: <body of sub-skills/<id>.md, marked cache-control: ephemeral>
+user:   Session ID: ...
+        Time range: ...
+        Splunk rows (projected):
+        ...
+```
+
+Sub-skill body cache hits give a **10-25% reduction** on cold runs
+where the user picks the same analysis twice in a row, and similar
+gains across users running the same analysis. If the harness doesn't
+expose cache-control, this is a no-op — don't error.
+
+**Don't** put per-session data (sessionId, rows) in the cached
+block. Cache misses cost more than they save when the cache key
+churns.
+
+### 3. Streaming responses (when harness allows)
+
+If the harness exposes LLM streaming, request a streaming response
+and surface partial output to the user as it arrives. Wall-clock is
+unchanged but perceived latency drops dramatically — a 60s analysis
+feels like 5s if the user sees the executive summary at second 5.
+
+If the harness doesn't expose streaming, skip — don't try to fake it.
+
 ## ⏱️ Stage timings (always track)
 
 For every user-initiated action, track wall-clock time per stage and

@@ -4,6 +4,7 @@ label: Summary (single session OR time interval)
 description: Plain-English summary with sub-headings. Works for one session, OR aggregated over a time window (e.g. all sessions for a customer over a day).
 output: markdown
 order: 5
+projection: time,op,status,requestId,latency,query,site
 tags: [synthesis, narrative]
 ---
 

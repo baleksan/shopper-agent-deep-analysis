@@ -1,0 +1,19 @@
+# Local artifacts produced by the skill at runtime.
+.agents/
+*.html
+!templates/*.html
+!templates/*.html.tmpl
+
+# OS / editor noise.
+.DS_Store
+*.swp
+*~
+
+# Python.
+__pycache__/
+*.pyc
+.venv/
+
+# Working notes (keep them local).
+NOTES.md
+TODO.md

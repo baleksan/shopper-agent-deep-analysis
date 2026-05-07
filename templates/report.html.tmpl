@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"></script>
+<style>
+  :root {
+    --bg: #0f172a;
+    --bg-card: #1e293b;
+    --bg-elev: #334155;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --accent: #38bdf8;
+    --accent2: #a78bfa;
+    --good: #34d399;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+    color: var(--text);
+    margin: 0;
+    padding: 24px;
+    line-height: 1.55;
+    min-height: 100vh;
+  }
+  .container { max-width: 1180px; margin: 0 auto; }
+  header {
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+  }
+  header h1 {
+    margin: 0 0 4px 0;
+    font-size: 1.7rem;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  header .subtitle { color: var(--text-dim); font-size: 0.95rem; }
+  .badges { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: var(--bg-elev);
+    font-size: 0.82rem;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .badge.good { background: rgba(52,211,153,0.15); color: var(--good); border-color: rgba(52,211,153,0.4); }
+  .badge.warn { background: rgba(251,191,36,0.15); color: var(--warn); border-color: rgba(251,191,36,0.4); }
+  .badge.bad  { background: rgba(248,113,113,0.15); color: var(--bad); border-color: rgba(248,113,113,0.4); }
+
+  .grid { display: grid; gap: 20px; }
+  .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 800px) {
+    .grid.cols-3, .grid.cols-2 { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+  .card h2 {
+    margin: 0 0 14px 0;
+    font-size: 1.1rem;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card h3 { margin: 18px 0 10px 0; font-size: 0.95rem; color: var(--accent2); }
+
+  .stat {
+    text-align: center;
+    padding: 14px 8px;
+  }
+  .stat .num { font-size: 2.2rem; font-weight: 700; color: var(--accent); margin: 4px 0; }
+  .stat .lbl { color: var(--text-dim); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th { text-align: left; color: var(--accent2); padding: 8px 10px; border-bottom: 1px solid var(--border); font-weight: 600; }
+  td { padding: 8px 10px; border-bottom: 1px solid rgba(51,65,85,0.4); }
+  tbody tr:hover { background: rgba(56,189,248,0.05); }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  td.id { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.82rem; color: var(--text-dim); }
+
+  .chart-wrap { position: relative; height: 320px; }
+  .chart-wrap.tall { height: 420px; }
+
+  .analysis-body {
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 24px 28px;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    margin-bottom: 20px;
+  }
+  .analysis-body h2 { color: var(--accent); margin-top: 24px; }
+  .analysis-body h3 { color: var(--accent2); margin-top: 20px; }
+  .analysis-body code { background: var(--bg-elev); padding: 1px 6px; border-radius: 4px; font-size: 0.88em; }
+  .analysis-body pre { background: var(--bg-elev); padding: 14px; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; }
+  .analysis-body pre code { background: transparent; padding: 0; }
+  .analysis-body table { margin: 12px 0; }
+  .analysis-body blockquote {
+    border-left: 3px solid var(--accent);
+    margin: 12px 0;
+    padding: 4px 16px;
+    color: var(--text-dim);
+    background: rgba(56,189,248,0.05);
+  }
+  .analysis-body a { color: var(--accent); }
+
+  .links-list { list-style: none; padding: 0; margin: 0; }
+  .links-list li { padding: 10px 0; border-bottom: 1px solid rgba(51,65,85,0.4); }
+  .links-list li:last-child { border-bottom: none; }
+  .links-list .lbl { font-weight: 600; color: var(--text); display: block; }
+  .links-list .note { font-size: 0.85rem; color: var(--text-dim); display: block; margin-top: 2px; }
+  .links-list a {
+    color: var(--accent);
+    word-break: break-all;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.78rem;
+  }
+
+  footer {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.82rem;
+    padding: 24px 0;
+  }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>__TITLE__</h1>
+  <div class="subtitle">__SUBTITLE__</div>
+  <div class="badges">__BADGES__</div>
+</header>
+
+<section class="grid cols-3" style="margin-bottom: 20px;">
+  __STATS_CARDS__
+</section>
+
+<section class="grid cols-2" style="margin-bottom: 20px;">
+  <div class="card">
+    <h2>📊 Operations by type</h2>
+    <div class="chart-wrap"><canvas id="opsChart"></canvas></div>
+  </div>
+  <div class="card">
+    <h2>⚡ Latency per operation (ms)</h2>
+    <div class="chart-wrap"><canvas id="latencyChart"></canvas></div>
+  </div>
+</section>
+
+<section class="grid cols-2" style="margin-bottom: 20px;">
+  <div class="card">
+    <h2>🕐 Timeline (chronological)</h2>
+    <div class="chart-wrap tall"><canvas id="timelineChart"></canvas></div>
+  </div>
+  <div class="card">
+    <h2>🩺 Status breakdown</h2>
+    <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
+  </div>
+</section>
+
+__OPERATIONS_TABLE__
+
+<section class="analysis-body">
+  <h2 style="margin-top: 0;">🔬 __ANALYSIS_LABEL__</h2>
+  <div id="analysis-content"></div>
+</section>
+
+<section class="card" style="margin-bottom: 20px;">
+  <h2>🔗 Splunk Links Used</h2>
+  <ul class="links-list">__SPLUNK_LINKS__</ul>
+</section>
+
+<footer>
+  Generated by <strong>shopper-agent-obs-hub-analyze</strong> on __GENERATED_AT__ • Self-contained HTML — share by attaching this file
+</footer>
+
+</div>
+
+<script>
+  const ANALYSIS_RAW = __ANALYSIS_RAW_JSON__;
+  const ANALYSIS_OUTPUT_TYPE = __ANALYSIS_OUTPUT_TYPE_JSON__;
+  const CHART_DATA = __CHART_DATA_JSON__;
+
+  // Render the analysis body.
+  (function renderAnalysis() {
+    const target = document.getElementById('analysis-content');
+    if (ANALYSIS_OUTPUT_TYPE === 'json') {
+      try {
+        const parsed = (typeof ANALYSIS_RAW === 'string') ? JSON.parse(ANALYSIS_RAW) : ANALYSIS_RAW;
+        const pre = document.createElement('pre');
+        const code = document.createElement('code');
+        code.textContent = JSON.stringify(parsed, null, 2);
+        pre.appendChild(code);
+        target.appendChild(pre);
+      } catch (e) {
+        target.textContent = String(ANALYSIS_RAW);
+      }
+    } else {
+      target.innerHTML = marked.parse(String(ANALYSIS_RAW));
+    }
+  })();
+
+  // Chart styling defaults.
+  Chart.defaults.color = '#94a3b8';
+  Chart.defaults.borderColor = '#334155';
+  Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif';
+
+  const palette = ['#38bdf8','#a78bfa','#34d399','#fbbf24','#f87171','#f472b6','#60a5fa','#fb923c','#a3e635','#22d3ee'];
+
+  // Operations doughnut.
+  if (CHART_DATA.ops_by_type && CHART_DATA.ops_by_type.labels.length) {
+    new Chart(document.getElementById('opsChart'), {
+      type: 'doughnut',
+      data: {
+        labels: CHART_DATA.ops_by_type.labels,
+        datasets: [{ data: CHART_DATA.ops_by_type.values, backgroundColor: palette, borderColor: '#1e293b', borderWidth: 2 }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 14, padding: 12 } } }
+      }
+    });
+  }
+
+  // Latency bar chart (avg per op).
+  if (CHART_DATA.latency_by_op && CHART_DATA.latency_by_op.labels.length) {
+    new Chart(document.getElementById('latencyChart'), {
+      type: 'bar',
+      data: {
+        labels: CHART_DATA.latency_by_op.labels,
+        datasets: [
+          { label: 'avg (ms)', data: CHART_DATA.latency_by_op.avg, backgroundColor: '#38bdf8' },
+          { label: 'max (ms)', data: CHART_DATA.latency_by_op.max, backgroundColor: '#a78bfa' }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { beginAtZero: true, grid: { color: 'rgba(148,163,184,0.1)' } },
+          x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 30 }, grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  // Timeline scatter — each operation as a point with duration as bar width.
+  if (CHART_DATA.timeline && CHART_DATA.timeline.points.length) {
+    const tl = CHART_DATA.timeline;
+    new Chart(document.getElementById('timelineChart'), {
+      type: 'scatter',
+      data: {
+        datasets: [{
+          label: 'Operation',
+          data: tl.points.map(p => ({ x: p.t, y: p.row, _label: p.label, _dur: p.duration_ms })),
+          backgroundColor: tl.points.map(p => palette[p.color_idx % palette.length]),
+          pointRadius: 7,
+          pointHoverRadius: 10
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { type: 'linear', title: { display: true, text: 'seconds since session start' }, grid: { color: 'rgba(148,163,184,0.1)' } },
+          y: {
+            type: 'category',
+            labels: tl.y_labels,
+            offset: true,
+            grid: { color: 'rgba(148,163,184,0.05)' }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const r = ctx.raw;
+                return `${r._label} @ ${r.x.toFixed(2)}s (${r._dur ?? '?'} ms)`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // Status doughnut.
+  if (CHART_DATA.status && CHART_DATA.status.labels.length) {
+    const statusColors = CHART_DATA.status.labels.map(l => {
+      const lc = String(l).toLowerCase();
+      if (lc.includes('success') || lc === 'ok' || lc === '1') return '#34d399';
+      if (lc.includes('fail') || lc.includes('error')) return '#f87171';
+      if (lc === 'n/a' || lc === 'unknown') return '#94a3b8';
+      return '#fbbf24';
+    });
+    new Chart(document.getElementById('statusChart'), {
+      type: 'doughnut',
+      data: {
+        labels: CHART_DATA.status.labels,
+        datasets: [{ data: CHART_DATA.status.values, backgroundColor: statusColors, borderColor: '#1e293b', borderWidth: 2 }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 14, padding: 12 } } }
+      }
+    });
+  }
+</script>
+
+</body>
+</html>

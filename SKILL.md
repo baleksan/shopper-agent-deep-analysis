@@ -191,11 +191,20 @@ do not collapse them into a single step, do not silently default.
    `(a)` continue with another sub-skill on the same data, `(b)` start
    a fresh analysis on a different session, or `(c)` export the most
    recent analysis as a shareable HTML report. Wait for input.
-4. **HTML export is opt-in but always offered.** Every report in chat is
-   markdown by default. The user can request an HTML export by including
-   `+html` / "html report" / "shareable" in the request, or by picking
-   option `(c)` in the "what's next" menu. See
-   [Step 9](#step-9--export-html-report-on-request).
+4. **HTML export is universally available.** Every analysis sub-skill
+   (except those marked `html_eligible: false` — currently only
+   `create-gus-wi`) can be exported as a self-contained HTML report
+   with charts + statistics. Trigger paths:
+   - Append `+html` / "html report" / "shareable" / "share" to the
+     original request.
+   - Pick option `(c)` in the "what's next" menu after the chat
+     report renders.
+   - When the user said "share with X" or "send to X" in the
+     request, treat that as `+html` (they need a file).
+   See [Step 9](#step-9--export-html-report-on-request).
+5. **Action sub-skills (`html_eligible: false`) skip Step 9.** A GUS
+   write or any other action is not a report. Confirm the action
+   succeeded in chat; do not offer HTML export.
 
 If you skip any of these, you have not completed the skill correctly.
 
@@ -294,6 +303,47 @@ If the user gave a stage that isn't one of these, ask them to pick — don't
 guess. If they gave only a `botSessionId` (no `conversationId`) and ask for
 `scrt2` or `e2e`, run the bot-session → conversation reverse lookup from
 `shopper-agent-trace-visualize` Step 1b before falling back to `core`-only.
+
+## Input modes
+
+The skill supports **two input modes** for the data pull. Pick one based
+on what the user asked for.
+
+### Single-session mode (default)
+
+The user gave a `botSessionId`, `conversationId`, or both. Most
+sub-skills (`anomaly`, `latency`, `quality`, `query-analysis`,
+`suggested-improvements`, `create-gus-wi`) only operate on
+single-session input.
+
+### Interval mode
+
+Triggered when the user asks "what happened today for X", "give me a
+summary for SharkNinja last 6 hours", "summarize Funko's traffic
+yesterday", etc. — i.e. a **customer/site/org** + **time window**
+instead of a session ID.
+
+In this mode:
+1. Resolve customer → org_id + pod via the sister skill's
+   `customer_pods` mapping (or ask the user if unmapped).
+2. Pull rows aggregated across all sessions in the window. Use a
+   broader query than single-session mode:
+   ```
+   <CORE_INDEX_EXPR> <CORE_LOG_FILTER> organizationId="<ORG_ID>"
+   earliest=<earliest> latest=<latest>
+   | sort 0 _time asc
+   | head 5000
+   ```
+   Cap at `behavior.max_rows_per_analysis × 10` (default 5000) to
+   stay inside the MCP's 5,000-event limit.
+3. Confirm with the user before running for windows larger than
+   24h on a busy customer — that may exceed the row cap.
+
+**Sub-skills that support interval mode**: only `summary` today.
+The others assume single-session semantics (per-step latency,
+per-turn ESCI scoring, etc.) and would produce nonsense across
+multiple sessions. If the user picks an interval-incompatible
+sub-skill in interval mode, refuse and point at `summary` instead.
 
 ## Workflow
 

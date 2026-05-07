@@ -62,6 +62,115 @@ sessionId + stage  ─►  shopper-agent-splunk-query  ─►  Splunk rows  ─�
 - **The "What's next?" menu is the exception** — it's a state display,
   always rendered fully.
 
+## 🪗 Collapsible chat sections (always apply for analyses)
+
+Chat reports go through a markdown renderer that supports HTML
+pass-through (AI Suite Electron app, Claude.ai web, GitHub-flavored
+renderers, etc.). Use `<details><summary>` blocks so the user can fold
+sections inline — same UX as the HTML export.
+
+### Convention
+
+| Section | Wrap? | Default state |
+|---|---|---|
+| Top header table (sessionId, stage, time range, row count, …) | ❌ no wrap | always visible |
+| First H2 of the analysis body (the "Summary" / "Step Duration Table" / "Executive Summary") | ✅ wrap | `<details open>` |
+| All other H2 sections of the analysis body (Evidence, Impact, Root Causes, Recommendations, etc.) | ✅ wrap | `<details>` (collapsed by default) |
+| `## 🔗 Splunk Links Used` | ✅ wrap | `<details>` (collapsed) |
+| `## ▶️ What's next?` | ❌ no wrap — never collapse | always visible |
+
+Rationale: with most sections collapsed by default, the chat surface
+shows ≈ 5–8 lines of executive content + the summary block, with
+everything else one click away. This is the chat-side equivalent of the
+HTML report's "expand/collapse all" buttons.
+
+### Format
+
+````markdown
+<details open>
+<summary><strong>1) Anomaly Summary</strong></summary>
+
+- 🔴 SCAPI dominates every search turn at ~3.6–4.0 s
+- 🟠 …
+- 🟢 …
+
+</details>
+
+<details>
+<summary><strong>2) Evidence</strong></summary>
+
+| Anomaly | Snippet |
+|---|---|
+| … | … |
+
+</details>
+````
+
+### Rules
+
+- **Always wrap the heading text in `<strong>`** inside `<summary>` so it
+  retains visual weight when collapsed.
+- **Always leave a blank line** between `</summary>` and the section
+  content — many renderers won't parse the markdown body otherwise.
+- **Always leave a blank line** before `</details>` for the same reason.
+- **Don't wrap H3 / smaller subsections** in chat (too noisy at chat scale).
+  In the HTML report, H3s are wrapped automatically — keep chat tighter.
+- **Keep the header table inline** (not wrapped) — it's at-a-glance
+  metadata the user must see.
+- **Keep "What's next?" inline** (not wrapped) — it's the interactive
+  next step.
+- **JSON output sub-skills** (`*_json.txt`) wrap the entire JSON block in
+  a single `<details>` named "JSON output" — the schema is rigid and not
+  meant to be browsed section-by-section.
+
+### Worked example (snippet for the `anomaly` sub-skill)
+
+````markdown
+# 🔬 Obs-Hub Analysis — `<sessionId>`
+
+| Field | Value |
+|---|---|
+| … | … |
+
+---
+
+<details open>
+<summary><strong>1) Anomaly Summary</strong></summary>
+
+- 🔴 SCAPI hybrid call dominates every search turn at ~3.6–4.0 s
+- 🟠 `B2CProductSearchAction` is double-logged …
+- 🟢 No errors, retries, or stalls
+
+</details>
+
+<details>
+<summary><strong>2) Evidence</strong></summary>
+
+| Anomaly | Snippet |
+|---|---|
+| SCAPI hotspot | `HybridCallSCAPI=3957` |
+
+</details>
+
+<details>
+<summary><strong>3) Likely Impact</strong></summary>
+
+Each turn lands at ~5–6 seconds, dominated by SCAPI. …
+
+</details>
+
+<details>
+<summary><strong>🔗 Splunk Links Used</strong></summary>
+
+- **Core — full session (preprod):** …
+
+</details>
+
+## ▶️ What's next?
+
+(menu — never wrapped)
+````
+
 ## ⛳ Core rules (always apply)
 
 These behaviors are **mandatory** on every invocation. Do not skip them,

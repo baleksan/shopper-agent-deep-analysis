@@ -202,9 +202,20 @@ do not collapse them into a single step, do not silently default.
    - When the user said "share with X" or "send to X" in the
      request, treat that as `+html` (they need a file).
    See [Step 9](#step-9--export-html-report-on-request).
-5. **Action sub-skills (`html_eligible: false`) skip Step 9.** A GUS
-   write or any other action is not a report. Confirm the action
-   succeeded in chat; do not offer HTML export.
+5. **Action sub-skills (`html_eligible: false`) skip Step 9.** A
+   non-report sub-skill (none ship today, but the flag is reserved)
+   would not be HTML-exportable. Confirm the action succeeded in chat;
+   do not offer HTML export.
+6. **Filing a GUS work item is a post-action available on every
+   sub-skill.** Like HTML export, it's not a separate menu entry — it's
+   a follow-up the user can request inline (`+gus`) or from the
+   "what's next" menu (option `(d)`). When chosen, the skill (a) asks
+   for **team name** (required) and **theme** (optional), (b) renders
+   the HTML report if not already present, (c) creates the WI via
+   `sfcli:gus` with the analysis output embedded in `Details__c`, and
+   (d) attaches the HTML as a Salesforce File via
+   `scripts/attach_html_to_gus.sh`. See
+   [Step 10](#step-10--file-gus-work-item-on-request).
 
 If you skip any of these, you have not completed the skill correctly.
 
@@ -579,8 +590,13 @@ new `sessionId` (and optional stage) and I'll pull fresh data.
 (self-contained, with charts and stats). I'll write it to
 `.agents/artifacts/<sessionId>_<analysisId>.html`. Reply `c` or `html`.
 
-Reply with `a<n>` (e.g. `a3`), `b <sessionId>`, `c`, or just the number /
-ID of a sub-skill if it's unambiguous.
+**(d)** File a GUS work item from the most recent analysis. I'll ask for
+your **team name** (required) and an optional **theme**, then create the
+WI via `sfcli:gus` with the analysis output embedded in `Details__c` and
+the HTML report attached as a Salesforce File. Reply `d` or `gus`.
+
+Reply with `a<n>` (e.g. `a3`), `b <sessionId>`, `c`, `d`, or just the
+number / ID of a sub-skill if it's unambiguous.
 ```
 
 Rules:
@@ -679,6 +695,163 @@ What the renderer does (deterministic, no LLM):
 
 The output is a single ~20-30 KB HTML file. Open via
 `file://<absolute-path>` or attach directly to Slack.
+
+### Step 10 — File GUS work item (on request)
+
+Triggers (any of):
+- User included `+gus`, `+wi`, `+ticket`, `gus wi`, `file a gus`,
+  `create gus`, or `file ticket` in their original request.
+- User picked option `(d)` in the "What's next?" menu.
+- User explicitly says "file this in GUS" / "make a WI for that".
+
+This step **applies to every analysis sub-skill**, not just one.
+Whichever analysis the user most recently ran becomes the source.
+Skip when:
+- The most recent sub-skill has `html_eligible: false` AND nothing
+  GUS-meaningful was produced (none ship today; flag is reserved).
+- No analysis has run yet — refuse and ask for one first.
+
+### Behavior
+
+1. **Confirm scope** before doing anything else. Render this block and
+   stop:
+
+   ```
+   About to file a GUS work item:
+
+     Source analysis: <id> (run at <hh:mm> on this session)
+     Session: <sessionId>
+     Stage / env / org: <stage> / <env> / <org>
+     Candidate title: <draft from analysis findings>
+
+   I need:
+     • Team name (required, e.g. "CC-Chatty (Shopper & Buyer Agents)")
+     • Theme (optional — prefixes the title, e.g. "perf", "search-quality")
+
+   Reply with: team=<name> theme=<tag>   (or just confirm to use the candidate title)
+   ```
+
+2. **Ensure HTML report exists.** If Step 9 hasn't run yet for this
+   sub-skill, run it now (silently — no need to repeat the user-facing
+   confirmation). The HTML file is required for attachment.
+
+3. **Build the WI fields:**
+
+   - **Title**: `[<theme>] <one-line problem statement>` (≤ 80 chars,
+     theme optional). No requestId / sessionId in the title.
+   - **`Type__c`**:
+     - `Bug` if the source analysis reports `status != Success` rows or
+       any single operation > 4 s.
+     - `User Story` otherwise (forward-looking improvement).
+   - **`Details__c`** (HTML, ≤ 2 KB) — see structure below.
+   - **`Status__c`**: `New`.
+   - **`Story_Points__c`**: leave blank for Bug; default `2` for User
+     Story unless `suggested-improvements` named an L (5) / M (3) / S
+     (2) effort estimate.
+   - **Scrum Team**: resolved by `sfcli:gus` from the user's chosen
+     team name. If the user gave CC-Chatty, the user's MEMORY.md
+     defaults apply. For any other team, state explicitly that
+     team-specific defaults need fresh resolution.
+   - Everything else (assignee, product tag, sprint, validation-rule
+     fields like `Found_in_Build__c` / `Impact__c` / `Frequency__c`)
+     is `sfcli:gus`'s responsibility — that skill knows the user's
+     MEMORY.md template and resolves the current sprint at runtime.
+
+   **`Details__c` structure** (always include all four blocks):
+
+   ```html
+   <p><strong>Problem:</strong> <one-sentence statement with one
+   quantitative observation, e.g. "Three SCAPI calls in a 30-second
+   session each took 3.6–4.0 s, accounting for ~99% of
+   B2CProductSearchAction time."></p>
+
+   <p><strong>Why it matters:</strong> <one-sentence user / cost / data
+   impact></p>
+
+   <p><strong>Evidence:</strong> session
+   <code>&lt;botSessionId&gt;</code>, requestIds
+   <code>&lt;a, b, c&gt;</code>, <env>, <date>.
+   <a href="<splunk-link>">Raw Splunk</a>.
+   Full report attached as file.</p>
+
+   <p><strong>Analysis output (from <code>&lt;sub-skill-id&gt;</code>):</strong></p>
+   <blockquote>
+     <!-- Paste the analysis prose here, converted to HTML.
+          Strip the chat-side <details> wrappers — Salesforce HTML
+          fields don't render <details>. Use <h4> for what was a <h2>,
+          and so on.
+          Keep ≤ 1.5 KB after stripping. If the analysis is longer,
+          truncate the prose with "[full report attached as HTML]"
+          and rely on the file attachment for the rest. -->
+   </blockquote>
+   ```
+
+4. **Run the `sfcli:gus` write workflow.** Hand off the field map.
+   That skill performs its own preview + confirmation per its core
+   rules — do not skip its preview, even if you already showed the
+   user the scope confirmation in step 1. (User confirms twice — once
+   on scope+team, once on the full record. Worth it; GUS writes are
+   sticky.)
+
+5. **Attach the HTML report.** After the WI is created, get the
+   `ADM_Work__c` record Id from the `sfcli:gus` response and run:
+
+   ```bash
+   ~/.claude/skills/shopper-agent-obs-hub-analyze/scripts/attach_html_to_gus.sh \
+     <wi-record-id> \
+     .agents/artifacts/<sessionId>_<analysisId>.html \
+     "<analysis-label> — <sessionId>"
+   ```
+
+   The script:
+   - Creates a `ContentVersion` with the file body (base64).
+   - Resolves its `ContentDocumentId`.
+   - Creates a `ContentDocumentLink` to the work item.
+   - Returns the file's Salesforce URL.
+
+   Surface the file URL alongside the W-number in the final
+   confirmation.
+
+   If the attach script fails (auth, permissions, network), the WI is
+   already created — that's fine. Tell the user the WI Id, the failure
+   reason, and how to retry the attach manually.
+
+6. **Render the success block:**
+
+   ```
+   ✅ Created W-XXXXXXXX
+
+     Title:  <final title>
+     Team:   <team>
+     Type:   <Bug | User Story>  (Story Points: <n> | Bug priority auto-set)
+     Source: <sub-skill-id>
+     WI:     https://gus.lightning.force.com/lightning/r/ADM_Work__c/<id>/view
+     Attached: <html-file-url>
+
+   Anything else to file from this session?
+   ```
+
+### Rules
+
+- **Always preview** the scope block (step 1) **and** let
+  `sfcli:gus` show its own preview (step 4). Two confirmations. GUS
+  writes can't be undone cleanly.
+- **One WI per call.** If `suggested-improvements` produced a
+  6-item backlog, the user files them one at a time. Refuse bulk
+  filing and ask which IMP-NN to use.
+- **Always include the Splunk link** in `Details__c`. A WI without
+  the raw-data link is hard to triage.
+- **Always attach the HTML.** It's the readable artifact teammates
+  will actually open. The Details__c HTML is the searchable summary;
+  the file is the deep dive.
+- **Don't propagate CC-Chatty defaults to other teams.** If the user
+  named a team that isn't CC-Chatty, state that the user's
+  MEMORY.md GUS template applies only to CC-Chatty and the other
+  team's defaults need fresh resolution by `sfcli:gus`.
+- **GUS auth failure → stop.** Don't try workarounds; point at
+  `sfcli:gus`'s `workspace-auth.md`.
+- **HTML attach failure does not roll back the WI.** Report the
+  W-number and the attach error so the user can retry.
 
 ## Refreshing prompts from upstream
 

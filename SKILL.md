@@ -184,6 +184,49 @@ Each turn lands at ~5–6 seconds, dominated by SCAPI. …
 (menu — never wrapped)
 ````
 
+## ⏱️ Stage timings (always track)
+
+For every user-initiated action, track wall-clock time per stage and
+surface the breakdown both in chat (at the end of the report) and in
+the Slack DM (when one is sent). The breakdown answers "why did that
+take 45s?" without the user having to ask.
+
+**Stages** (skip stages that didn't run):
+
+| Stage | Starts when | Ends when |
+|---|---|---|
+| `prep` | user replies | sub-skill resolved, prereqs verified, sub-skills enumerated |
+| `splunk` | first MCP `query_splunk` call | last Splunk row received (or cache hit confirmed) |
+| `llm` | analysis prompt sent to LLM | LLM response complete + JSON-validated (if applicable) |
+| `render` | `render_html.py` invoked | HTML file written to disk |
+| `gus` | `sfcli:gus` write begins | `ContentDocumentLink` confirmed (or write fails) |
+| `total` | user replies | last action complete |
+
+**Render in chat** as a small table inside a `<details>` block named
+`⏱ Timing` placed just before the "What's next?" menu:
+
+```markdown
+<details>
+<summary><strong>⏱ Timing</strong></summary>
+
+| Stage | Time |
+|---|---|
+| prep   | 0.4 s |
+| splunk | 0.0 s *(cache hit)* |
+| llm    | 12.1 s |
+| render | 0.5 s |
+| **total** | **13.0 s** |
+
+</details>
+```
+
+Mark stages annotated with `(cache hit)` / `(skipped)` clearly so the
+user knows the zero isn't suspicious. If a stage didn't run at all,
+omit its row.
+
+**Include the same table in the Slack DM** when one is sent (see
+below) — same format, just a Slack-flavored markdown table.
+
 ## 📣 Long-running notifications (Slack DM)
 
 When an action takes long enough that the user is likely to switch
@@ -192,33 +235,72 @@ don't have to babysit the chat.
 
 **Trigger threshold**: any single action (Splunk pull, LLM analysis,
 HTML render, GUS write+attach, or any combination chained with
-`+html` / `+gus`) whose total wall-clock from the user's last reply
-exceeds **30 seconds**.
+`+html` / `+gus`) whose `total` stage time exceeds **30 seconds**.
 
 **How**:
 1. Get the user's Slack user_id once per session — you already know it
    for AI Suite users (the system surfaces it in Slack tool descriptions
    as the "current logged in user's user_id"). Don't ask the user; if
    you can't resolve it, log a warning in chat and skip the DM.
-2. After the action completes, call
-   `mcp__plugin_slack_slack__slack_send_message` with `channel_id =
+2. **Pick the link to share, in this priority order:**
+   - If the analysis was attached to a GUS WI in this session, use
+     the **GUS Salesforce File URL**
+     (`https://gus.my.salesforce.com/lightning/r/ContentDocument/<id>/view`).
+     This is clickable from Slack web/mobile/anywhere.
+   - Otherwise, use the **`file://` URL** AND include a one-line
+     explanation that Slack security blocks `file://` URLs from
+     opening directly, so the user must copy the path and paste it
+     into a browser address bar.
+   - Never include both — pick one, surface clearly.
+3. Call `mcp__plugin_slack_slack__slack_send_message` with `channel_id =
    <user's own user_id>` (a self-DM) and a message of this shape:
 
+   **When linked to a GUS WI:**
    ```
    ✅ Obs-Hub analysis ready — <sub-skill-id> on session <sessionId-short>
 
-   • Took <seconds>s
-   • <one-line headline finding, e.g. "0 failures, max latency 3960 ms">
-   • Report: <file:// URL or Salesforce File URL if attached to GUS>
+   • <one-line headline finding>
+   • Report: [📄 Open <sub-skill-id> report](https://gus.my.salesforce.com/lightning/r/ContentDocument/<id>/view)
+   • Linked to: [W-XXXXXXXX](https://gus.lightning.force.com/lightning/r/ADM_Work__c/<id>/view)
+
+   ⏱ Timing
+   | Stage | Time |
+   |---|---|
+   | ... | ... |
+   | **total** | **<n>s** |
+
+   Reply in chat to continue.
+   ```
+
+   **When NOT linked to a GUS WI (most common):**
+   ```
+   ✅ Obs-Hub analysis ready — <sub-skill-id> on session <sessionId-short>
+
+   • <one-line headline finding>
+   • Report path:
+     `/Users/.../019xxxxxx_<analysisId>.html`
+
+   ⚠️ Slack security blocks `file://` links from opening directly.
+   Copy the path above and paste it into your browser address bar
+   (or open it from Finder). The file is self-contained — no server
+   needed.
+
+   ⏱ Timing
+   | Stage | Time |
+   |---|---|
+   | ... | ... |
+   | **total** | **<n>s** |
 
    Reply in chat to continue.
    ```
 
    Use `slack_send_message` directly (not `slack_send_message_draft`) —
    this is a transactional notification, not a draft for review.
+   Send the **path inside a code-fenced block (single backticks)** so
+   the user can triple-click to select the whole thing.
 
 **Skip the DM when**:
-- The action completed in < 30s (the user is still watching).
+- The total time was < 30s (the user is still watching).
 - The user explicitly said "quiet" / "no slack" / "don't ping me".
 - The Slack tool is unavailable (gracefully skip, mention in chat).
 
@@ -228,8 +310,10 @@ exceeds **30 seconds**.
 - Include sensitive data in the DM (org IDs are fine; raw SCAPI
   payloads are not).
 - Use Slack channels — always DM the user, never post publicly.
-- Send the full report body — only the link. The HTML / WI page is
-  the place to read details.
+- Send the full report body — only the link/path + headline + timing.
+- Format `file://` URLs as markdown links (Slack will render them
+  clickable but they won't open). Use a plain code-fenced path
+  instead, with the explanation.
 
 ## ⛳ Core rules (always apply)
 

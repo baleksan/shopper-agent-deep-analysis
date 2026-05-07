@@ -1124,9 +1124,17 @@ Skip when:
 - **Always preview** the scope block (step 1) **and** let
   `sfcli:gus` show its own preview (step 4). Two confirmations. GUS
   writes can't be undone cleanly.
-- **One WI per call.** If `suggested-improvements` produced a
-  6-item backlog, the user files them one at a time. Refuse bulk
-  filing and ask which IMP-NN to use.
+- **One WI per analysis output.** Each Step-10 invocation creates
+  exactly one GUS work item, regardless of how many findings the
+  analysis produced. For `suggested-improvements`, that means filing
+  the **whole backlog** as a single WI — title summarizes the
+  highest-priority item, `Details__c` lists every IMP-NN row with its
+  tier and one-line rationale, and the full HTML attachment carries
+  the experiment cards. Reasoning: GUS WIs are sticky, the team
+  triages them one at a time anyway, and filing 8 separate WIs
+  fragments context and clutters the backlog. If the user later wants
+  individual WIs per IMP, they can re-invoke Step 10 with `+gus`
+  pointed at a specific IMP-NN.
 - **Always include the Splunk link** in `Details__c`. A WI without
   the raw-data link is hard to triage.
 - **Always attach the HTML.** It's the readable artifact teammates

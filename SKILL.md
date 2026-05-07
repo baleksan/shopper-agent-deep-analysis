@@ -696,13 +696,17 @@ User: *"Score search quality end-to-end for conversation 8ec19111-08ca-4986-ba67
 → Apply body of `sub-skills/quality.md`.
 → Output the ESCI table, NDCG@5/@10, suggestion quality.
 
-### Example 4 — All analyses, JSON variants
+### Example 4 — Suggested improvements (cross-aspect synthesis)
 
-User: *"Run all the JSON analyses on 019def…"*
+User: *"What should we improve in this session? Give me a backlog."*
 
-→ Run `anomaly-json`, `quality-json`, `summary` (the JSON-output set).
-→ Stitch one report with three fenced JSON blocks. Confirm before kicking off
-  3 LLM calls.
+→ Resolve session, pull rows (or reuse from cache).
+→ Apply body of `sub-skills/suggested-improvements.md`.
+→ Output the prioritized P0/P1/P2 backlog with experiment cards
+  (hypothesis, single variable, primary + guardrail metrics, exit
+  criteria) for each item. Best run **after** `anomaly`, `latency`, or
+  `quality` so the synthesis has prior findings to draw on, but works
+  standalone too.
 
 ### Example 5 — Stage UX
 

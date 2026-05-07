@@ -61,6 +61,19 @@ sessionId + stage  ─►  shopper-agent-splunk-query  ─►  Splunk rows  ─�
   outputs are exempt from word counts but still avoid repeated content.
 - **The "What's next?" menu is the exception** — it's a state display,
   always rendered fully.
+- **Action results are even tighter.** When the user runs an
+  action (`+html`, `+gus`, file attach, etc.), the post-action
+  response should be **one sentence per discrete action taken**, plus
+  the resulting links / IDs in a small table or list. Skip the
+  congratulatory framing and recap of inputs the user just gave you.
+  - ❌ "I've successfully completed step 1, which involved rendering
+    the HTML report. Then I moved on to step 2, which was creating the
+    GUS work item. After that I attached..."
+  - ✅ "Rendered HTML, created W-22400143, attached the report.
+    Links: [...]."
+- **Surface only what the user needs to act on next.** Errors,
+  unexpected schema mismatches, and pending questions get called out;
+  routine successes don't.
 
 ## 🪗 Collapsible chat sections (always apply for analyses)
 
@@ -830,6 +843,28 @@ Skip when:
 
    Anything else to file from this session?
    ```
+
+### GUS schema gotchas
+
+- **Title field on `ADM_Work__c` is `Subject__c`, NOT `Subject`.**
+  GUS is a custom-object app; almost every field has the `__c`
+  suffix. The standard-object name `Subject` (Case, Task) does not
+  apply here and will fail with `INVALID_FIELD: No such column
+  'Subject' on sobject of type ADM_Work__c`.
+- **Lookup fields on `ADM_Work__c` are `<Thing>__c`** (Id-typed),
+  not `<Thing>__r.Id`. Examples: `Scrum_Team__c`, `Sprint__c`,
+  `Assignee__c`, `Product_Tag__c`, `QA_Engineer__c`,
+  `Product_Owner__c`, `Found_in_Build__c`, `Impact__c`,
+  `Frequency__c`, `Epic__c`. Pass the 15- or 18-char Id directly.
+- **`Story_Points__c` is a number** (not a string). Pass `2`, not
+  `"2"`.
+- **Sprint resolution is per-team:** filter by `Scrum_Team__c =
+  '<team-id>'` and `Start_Date__c <= TODAY <= End_Date__c`. Don't
+  rely on a `Team__r.Name` join — the lookup is to
+  `ADM_Scrum_Team__c` and the filter syntax depends on the env.
+- **Always verify with the schema describe** if a write fails
+  with `INVALID_FIELD` before retrying — the field may exist under
+  a different name.
 
 ### Rules
 

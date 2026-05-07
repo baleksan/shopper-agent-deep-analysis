@@ -273,22 +273,24 @@ def render_operations_table(parsed_rows: list[dict]) -> str:
         )
     return f"""
 <section class="card" style="margin-bottom: 20px;">
-  <h2>📋 Operations table</h2>
-  <div style="overflow-x:auto;">
-  <table>
-    <thead>
-      <tr>
-        <th>Time (UTC)</th>
-        <th>Operation</th>
-        <th>Status</th>
-        <th class="num">Top latency (ms)</th>
-        <th>Request ID</th>
-        <th>Stage breakdown</th>
-      </tr>
-    </thead>
-    <tbody>{''.join(rows_html)}</tbody>
-  </table>
-  </div>
+  <details class="section" open>
+    <summary>📋 Operations table</summary>
+    <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Time (UTC)</th>
+          <th>Operation</th>
+          <th>Status</th>
+          <th class="num">Top latency (ms)</th>
+          <th>Request ID</th>
+          <th>Stage breakdown</th>
+        </tr>
+      </thead>
+      <tbody>{''.join(rows_html)}</tbody>
+    </table>
+    </div>
+  </details>
 </section>
 """
 

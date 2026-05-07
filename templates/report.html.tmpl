@@ -145,6 +145,75 @@
     padding: 24px 0;
   }
   footer a { color: var(--accent); }
+
+  /* ─── Collapsible sections ──────────────────────────────── */
+  details.section { margin: 0; padding: 0; }
+  details.section > summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 14px 0;
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 1.1rem;
+    transition: color 0.15s;
+  }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary::before {
+    content: "▾";
+    display: inline-block;
+    color: var(--text-dim);
+    font-size: 0.85em;
+    width: 14px;
+    transition: transform 0.18s ease;
+    flex-shrink: 0;
+  }
+  details.section:not([open]) > summary::before { transform: rotate(-90deg); }
+  details.section > summary:hover { color: var(--accent2); }
+  details.section > summary:hover::before { color: var(--accent2); }
+  details.section[open] > summary { margin-bottom: 14px; }
+  details.section:not([open]) > summary { margin-bottom: 0; }
+
+  /* Card-level collapse: replace <h2> inside cards. */
+  .card details.section > summary { padding: 0; }
+
+  /* Inside the analysis body, h2/h3 become summaries. */
+  .analysis-body details.section > summary {
+    margin-top: 18px;
+    padding: 4px 0;
+  }
+  .analysis-body details.section[open] > summary { color: var(--accent); }
+  .analysis-body details.section.h3 > summary {
+    font-size: 0.95rem;
+    color: var(--accent2);
+    margin-top: 14px;
+  }
+
+  .toggle-bar {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+  .toggle-bar button {
+    background: var(--bg-elev);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .toggle-bar button:hover {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
 </style>
 </head>
 <body>
@@ -154,6 +223,10 @@
   <h1>__TITLE__</h1>
   <div class="subtitle">__SUBTITLE__</div>
   <div class="badges">__BADGES__</div>
+  <div class="toggle-bar">
+    <button onclick="toggleAll(true)">▾ Expand all</button>
+    <button onclick="toggleAll(false)">▸ Collapse all</button>
+  </div>
 </header>
 
 <section class="grid cols-3" style="margin-bottom: 20px;">
@@ -162,36 +235,48 @@
 
 <section class="grid cols-2" style="margin-bottom: 20px;">
   <div class="card">
-    <h2>📊 Operations by type</h2>
-    <div class="chart-wrap"><canvas id="opsChart"></canvas></div>
+    <details class="section" open>
+      <summary>📊 Operations by type</summary>
+      <div class="chart-wrap"><canvas id="opsChart"></canvas></div>
+    </details>
   </div>
   <div class="card">
-    <h2>⚡ Latency per operation (ms)</h2>
-    <div class="chart-wrap"><canvas id="latencyChart"></canvas></div>
+    <details class="section" open>
+      <summary>⚡ Latency per operation (ms)</summary>
+      <div class="chart-wrap"><canvas id="latencyChart"></canvas></div>
+    </details>
   </div>
 </section>
 
 <section class="grid cols-2" style="margin-bottom: 20px;">
   <div class="card">
-    <h2>🕐 Timeline (chronological)</h2>
-    <div class="chart-wrap tall"><canvas id="timelineChart"></canvas></div>
+    <details class="section" open>
+      <summary>🕐 Timeline (chronological)</summary>
+      <div class="chart-wrap tall"><canvas id="timelineChart"></canvas></div>
+    </details>
   </div>
   <div class="card">
-    <h2>🩺 Status breakdown</h2>
-    <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
+    <details class="section" open>
+      <summary>🩺 Status breakdown</summary>
+      <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
+    </details>
   </div>
 </section>
 
 __OPERATIONS_TABLE__
 
 <section class="analysis-body">
-  <h2 style="margin-top: 0;">🔬 __ANALYSIS_LABEL__</h2>
-  <div id="analysis-content"></div>
+  <details class="section" open>
+    <summary style="margin-top: 0;">🔬 __ANALYSIS_LABEL__</summary>
+    <div id="analysis-content"></div>
+  </details>
 </section>
 
 <section class="card" style="margin-bottom: 20px;">
-  <h2>🔗 Splunk Links Used</h2>
-  <ul class="links-list">__SPLUNK_LINKS__</ul>
+  <details class="section" open>
+    <summary>🔗 Splunk Links Used</summary>
+    <ul class="links-list">__SPLUNK_LINKS__</ul>
+  </details>
 </section>
 
 <footer>
@@ -205,7 +290,8 @@ __OPERATIONS_TABLE__
   const ANALYSIS_OUTPUT_TYPE = __ANALYSIS_OUTPUT_TYPE_JSON__;
   const CHART_DATA = __CHART_DATA_JSON__;
 
-  // Render the analysis body.
+  // Render the analysis body, then wrap each H2 (and nested H3) in a
+  // collapsible <details> block so users can drill in/out.
   (function renderAnalysis() {
     const target = document.getElementById('analysis-content');
     if (ANALYSIS_OUTPUT_TYPE === 'json') {
@@ -219,10 +305,49 @@ __OPERATIONS_TABLE__
       } catch (e) {
         target.textContent = String(ANALYSIS_RAW);
       }
-    } else {
-      target.innerHTML = marked.parse(String(ANALYSIS_RAW));
+      return;  // JSON mode: no headings to fold.
     }
+    target.innerHTML = marked.parse(String(ANALYSIS_RAW));
+    wrapHeadings(target, 'H2', 'section');
+    // Now find any newly-wrapped sections and recurse into their children for H3s.
+    target.querySelectorAll('details.section > div.section-body').forEach(body => {
+      wrapHeadings(body, 'H3', 'section h3');
+    });
   })();
+
+  // wrapHeadings: walks `root`'s direct children. Each time it sees a heading
+  // of `tagName`, it starts a new <details> with that heading's text as the
+  // <summary>, and moves all subsequent siblings into the body until the next
+  // heading of the same level (or the end).
+  function wrapHeadings(root, tagName, sectionClass) {
+    const children = Array.from(root.children);
+    let currentDetails = null;
+    let currentBody = null;
+    const toRemove = [];
+    children.forEach(child => {
+      if (child.tagName === tagName) {
+        currentDetails = document.createElement('details');
+        currentDetails.className = sectionClass;
+        currentDetails.open = true;
+        const summary = document.createElement('summary');
+        summary.innerHTML = child.innerHTML;
+        currentDetails.appendChild(summary);
+        currentBody = document.createElement('div');
+        currentBody.className = 'section-body';
+        currentDetails.appendChild(currentBody);
+        root.insertBefore(currentDetails, child);
+        toRemove.push(child);
+      } else if (currentBody) {
+        currentBody.appendChild(child);
+      }
+    });
+    toRemove.forEach(el => el.remove());
+  }
+
+  // Expand / collapse all <details class="section"> on the page.
+  function toggleAll(open) {
+    document.querySelectorAll('details.section').forEach(d => { d.open = open; });
+  }
 
   // Chart styling defaults.
   Chart.defaults.color = '#94a3b8';

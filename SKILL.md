@@ -38,6 +38,30 @@ sessionId + stage  ─►  shopper-agent-splunk-query  ─►  Splunk rows  ─�
                         delegates the data pull)
 ```
 
+## 📏 Conciseness (always apply)
+
+- **Be tight, not exhaustive.** Reports are read in chat — every section
+  earns its place. If a sub-skill asks for "3-8 bullets", give 3-5; aim
+  for the lower bound.
+- **One example per claim, not three.** When you've already shown
+  evidence in §2, do not re-list the same numbers in §3 / §4 / §5.
+  Reference back instead.
+- **Drop section headings that have nothing in them.** If "Missing or
+  Skipped Steps" has no real findings, write a one-liner ("All expected
+  steps observed") instead of a multi-row table of "✅ correctly absent".
+- **Tables over paragraphs**, but only when there are ≥ 3 rows worth
+  showing. A 1-row "table" is just a sentence in disguise.
+- **Skip the meta-commentary**: don't narrate what you're about to do
+  ("Now I'll examine…"), don't restate the user's question, don't
+  re-introduce the session metadata that's already in the header.
+- **No verbose hedging.** Replace "It's worth noting that..." / "One
+  thing to consider..." with the bare statement.
+- **Soft cap**: aim for ≤ ~600 words of prose+evidence in the analysis
+  body for a single sub-skill on a small (< 50-row) session. JSON
+  outputs are exempt from word counts but still avoid repeated content.
+- **The "What's next?" menu is the exception** — it's a state display,
+  always rendered fully.
+
 ## ⛳ Core rules (always apply)
 
 These behaviors are **mandatory** on every invocation. Do not skip them,

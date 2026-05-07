@@ -184,6 +184,48 @@ Each turn lands at ~5–6 seconds, dominated by SCAPI. …
 (menu — never wrapped)
 ````
 
+## 🪄 Output token economy (always apply to LLM calls)
+
+Sub-skill outputs are read by engineers, not customers. Optimize for
+information density per token. **Append these rules verbatim to every
+sub-skill prompt body** when building the Step-5 LLM call — they sit
+between the sub-skill body and the per-session data:
+
+```
+=== Output rules (token economy) ===
+- Fragments fine. Drop articles when meaning survives.
+- 1 sentence per finding max. Bullet glyphs over prose.
+- Tables for ≥3 data points. Numbers in cells, not sentences.
+- No transition / closing / restate phrases ("In summary…",
+  "It's worth noting…", "Looking at the data…"). State the thing.
+- No hedges ("perhaps", "it may be", "this could indicate"). State with
+  the supporting number instead.
+- No section preambles. Heading is enough.
+- Recommendations as imperatives. "Add cache." not "We should consider
+  adding a cache."
+- Cite ms/counts/IDs inline once. Don't repeat across sections.
+- Use →  for cause/effect, × for "didn't happen", + for "also". Skip
+  the words.
+- 2-line cap per bullet.
+- Direct quotes (user queries, log lines, schema fields) go verbatim —
+  these rules don't apply inside quoted material.
+=== End output rules ===
+```
+
+Don't paraphrase these rules at runtime. Append the literal block
+above. The LLM is more reliable with rule lists than with re-explained
+constraints.
+
+**Don't apply these rules to:**
+- The standard report header (sessionId, env, time range, row count) — those are key-value, already terse.
+- Splunk Links Used — URLs are URLs.
+- The "What's next?" menu — state display, must be readable.
+- The chat-rendered Timing table.
+
+**Validation requirement**: when changing these rules, re-run each
+sub-skill on a known dataset, diff findings against the previous
+output. Drop a rule if it removed a finding.
+
 ## 🚀 LLM speed (always apply)
 
 The LLM is the dominant cost — typically 80-95% of `total` time. Three

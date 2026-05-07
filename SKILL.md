@@ -184,6 +184,53 @@ Each turn lands at ~5–6 seconds, dominated by SCAPI. …
 (menu — never wrapped)
 ````
 
+## 📣 Long-running notifications (Slack DM)
+
+When an action takes long enough that the user is likely to switch
+tabs / context-switch, send a self-DM on Slack on completion so they
+don't have to babysit the chat.
+
+**Trigger threshold**: any single action (Splunk pull, LLM analysis,
+HTML render, GUS write+attach, or any combination chained with
+`+html` / `+gus`) whose total wall-clock from the user's last reply
+exceeds **30 seconds**.
+
+**How**:
+1. Get the user's Slack user_id once per session — you already know it
+   for AI Suite users (the system surfaces it in Slack tool descriptions
+   as the "current logged in user's user_id"). Don't ask the user; if
+   you can't resolve it, log a warning in chat and skip the DM.
+2. After the action completes, call
+   `mcp__plugin_slack_slack__slack_send_message` with `channel_id =
+   <user's own user_id>` (a self-DM) and a message of this shape:
+
+   ```
+   ✅ Obs-Hub analysis ready — <sub-skill-id> on session <sessionId-short>
+
+   • Took <seconds>s
+   • <one-line headline finding, e.g. "0 failures, max latency 3960 ms">
+   • Report: <file:// URL or Salesforce File URL if attached to GUS>
+
+   Reply in chat to continue.
+   ```
+
+   Use `slack_send_message` directly (not `slack_send_message_draft`) —
+   this is a transactional notification, not a draft for review.
+
+**Skip the DM when**:
+- The action completed in < 30s (the user is still watching).
+- The user explicitly said "quiet" / "no slack" / "don't ping me".
+- The Slack tool is unavailable (gracefully skip, mention in chat).
+
+**Don't**:
+- DM on every step. One DM per user-initiated action, not per
+  Splunk query / per LLM call.
+- Include sensitive data in the DM (org IDs are fine; raw SCAPI
+  payloads are not).
+- Use Slack channels — always DM the user, never post publicly.
+- Send the full report body — only the link. The HTML / WI page is
+  the place to read details.
+
 ## ⛳ Core rules (always apply)
 
 These behaviors are **mandatory** on every invocation. Do not skip them,
@@ -678,14 +725,25 @@ Behavior:
      --out=.agents/artifacts/<sessionId>_<analysisId>.html
    ```
 
+   The renderer **opens the file in the user's default browser by
+   default** (uses `open` on macOS, `xdg-open` on Linux,
+   `os.startfile` on Windows, `webbrowser.open` as fallback). Pass
+   `--no-open` to suppress — useful when:
+   - you're rendering for a downstream attachment (Step 10's GUS
+     attach already opens it via the WI page);
+   - the user explicitly asked for a link only, not a tab;
+   - you're rendering several reports back-to-back via
+     `all-remaining` and don't want to spawn N browser tabs.
+
    ⚠️ **Use `=` syntax for every flag** (`--earliest=-7d@d`, not
    `--earliest -7d@d`). Time values that start with `-` will otherwise
    confuse argparse.
 
 4. **Confirm in chat** with the absolute path and a `file://` URL the
-   user can click. Mention the file is self-contained (Chart.js +
-   marked.js are loaded from CDN; nothing else is needed) and can be
-   shared by attaching it to Slack / email.
+   user can click. State that the file was opened in their default
+   browser (or that the auto-open was suppressed, if so). The file is
+   self-contained (Chart.js + marked.js are CDN; nothing else is
+   needed) and can be shared by attaching it to Slack / email.
 5. **Multiple analyses on the same session** (option `all`, or after
    running several sub-skills in succession): when the user asks for
    HTML, default to rendering **the most recent analysis only**. If

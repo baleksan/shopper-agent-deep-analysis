@@ -46,7 +46,9 @@ import html
 import json
 import os
 import re
+import subprocess
 import sys
+import webbrowser
 from pathlib import Path
 
 PALETTE = ["#38bdf8", "#a78bfa", "#34d399", "#fbbf24", "#f87171",
@@ -328,6 +330,10 @@ def main() -> int:
     p.add_argument("--meta-file", default="", help="JSON metadata (splunk_links, etc.)")
     p.add_argument("--out", required=True, help="Output HTML path")
     p.add_argument("--template", default="", help="Override template path")
+    p.add_argument("--open", dest="open_browser", action="store_true", default=True,
+                   help="Open the rendered HTML in the default browser (default: on)")
+    p.add_argument("--no-open", dest="open_browser", action="store_false",
+                   help="Skip opening the browser")
     args = p.parse_args()
 
     skill_dir = Path(__file__).resolve().parent.parent
@@ -384,9 +390,34 @@ def main() -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(out, encoding="utf-8")
 
+    file_url = f"file://{out_path.resolve()}"
     print(f"✅ HTML report written: {out_path}")
     print(f"   Size: {out_path.stat().st_size:,} bytes")
-    print(f"   Open: file://{out_path.resolve()}")
+    print(f"   Open: {file_url}")
+
+    if args.open_browser:
+        # Try to open in the user's default browser. macOS `open` is the
+        # most reliable on this platform; fall back to webbrowser.open
+        # cross-platform. Either way, never block on browser launch — and
+        # never fail the script if the launch fails (the file is what
+        # matters).
+        opened = False
+        try:
+            if sys.platform == "darwin":
+                subprocess.run(["open", file_url], check=False, timeout=3)
+                opened = True
+            elif sys.platform.startswith("linux"):
+                subprocess.run(["xdg-open", file_url], check=False, timeout=3)
+                opened = True
+            elif os.name == "nt":
+                os.startfile(str(out_path.resolve()))  # type: ignore[attr-defined]
+                opened = True
+            else:
+                opened = webbrowser.open(file_url, new=2)
+        except Exception as e:
+            print(f"   (browser auto-open failed: {e})")
+        if opened:
+            print(f"   🌐 Opened in browser.")
     return 0
 
 

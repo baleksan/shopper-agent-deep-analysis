@@ -310,6 +310,7 @@ take 45s?" without the user having to ask.
 | `splunk` | first MCP `query_splunk` call | last Splunk row received (or cache hit confirmed) |
 | `llm` | analysis prompt sent to LLM | LLM response complete + JSON-validated (if applicable) |
 | `render` | `render_html.py` invoked | HTML file written to disk |
+| `screenshot` | `screenshot_html.py` invoked | PNG written to disk |
 | `gus` | `sfcli:gus` write begins | `ContentDocumentLink` confirmed (or write fails) |
 | `total` | user replies | last action complete |
 
@@ -441,35 +442,30 @@ do not collapse them into a single step, do not silently default.
    ends with a `## 🔗 Splunk Links Used` section listing the **exact**
    queries you ran to produce the data, as clickable web URLs. See
    [Step 7](#step-7--always-output-the-splunk-links-used-mandatory).
-3. **What's next on exit.** After every successful analysis output, render
+3. **HTML report + screenshot preview by default.** After every successful
+   analysis, immediately (a) render the self-contained HTML report via
+   `scripts/render_html.py` (with `--no-open`), (b) capture a PNG
+   snapshot of the top of that report via `scripts/screenshot_html.py`,
+   and (c) embed the PNG in chat as a clickable image that links to the
+   HTML file. This replaces the verbose chat-side analysis dump — the
+   chat surface gets a tight executive summary (≤ 6 bullets / 1 small
+   table) plus the screenshot. Full prose, tables, charts, and Splunk
+   links live inside the HTML. See
+   [Step 9](#step-9--render-html--screenshot-default-after-every-analysis).
+   Sub-skills with `html_eligible: false` (none ship today; flag
+   reserved) skip this — chat gets the full report instead.
+4. **What's next on exit.** After the screenshot is shown, render
    the [Step 8](#step-8--ask-whats-next-mandatory) follow-up menu offering
-   `(a)` continue with another sub-skill on the same data, `(b)` start
-   a fresh analysis on a different session, or `(c)` export the most
-   recent analysis as a shareable HTML report. Wait for input.
-4. **HTML export is universally available.** Every analysis sub-skill
-   (except those marked `html_eligible: false` — currently only
-   `create-gus-wi`) can be exported as a self-contained HTML report
-   with charts + statistics. Trigger paths:
-   - Append `+html` / "html report" / "shareable" / "share" to the
-     original request.
-   - Pick option `(c)` in the "what's next" menu after the chat
-     report renders.
-   - When the user said "share with X" or "send to X" in the
-     request, treat that as `+html` (they need a file).
-   See [Step 9](#step-9--export-html-report-on-request).
-5. **Action sub-skills (`html_eligible: false`) skip Step 9.** A
-   non-report sub-skill (none ship today, but the flag is reserved)
-   would not be HTML-exportable. Confirm the action succeeded in chat;
-   do not offer HTML export.
-6. **Filing a GUS work item is a post-action available on every
-   sub-skill.** Like HTML export, it's not a separate menu entry — it's
-   a follow-up the user can request inline (`+gus`) or from the
-   "what's next" menu (option `(d)`). When chosen, the skill (a) asks
-   for **team name** (required) and **theme** (optional), (b) renders
-   the HTML report if not already present, (c) creates the WI via
-   `sfcli:gus` with the analysis output embedded in `Details__c`, and
-   (d) attaches the HTML as a Salesforce File via
-   `scripts/attach_html_to_gus.sh`. See
+   `(a)` continue with another sub-skill on the same data, or `(b)` start
+   a fresh analysis on a different session. Wait for input.
+5. **Filing a GUS work item is a post-action available on every
+   sub-skill.** It's a follow-up the user can request inline (`+gus`)
+   or from the "what's next" menu (option `(c)`). When chosen, the
+   skill (a) asks for **team name** (required) and **theme**
+   (optional), (b) reuses the HTML report rendered in Step 9 (already
+   on disk), (c) creates the WI via `sfcli:gus` with the analysis
+   output embedded in `Details__c`, and (d) attaches the HTML as a
+   Salesforce File via `scripts/attach_html_to_gus.sh`. See
    [Step 10](#step-10--file-gus-work-item-on-request).
 
 If you skip any of these, you have not completed the skill correctly.
@@ -739,34 +735,57 @@ If the user picked `all`, run them sequentially (or in parallel if the runtime
 allows independent LLM calls), and stitch into a single report with one
 section per analysis.
 
-### Step 6 — Render the report body
+### Step 6 — Save the analysis body and render the chat snapshot
 
-Header every report with the resolved context so the user can verify:
+The full analysis prose is **not** dumped into chat. It's written to disk
+so Step 9 can render it into HTML, and chat gets a tight snapshot
+instead.
 
-```markdown
-# 🔬 Obs-Hub Analysis — <sessionId>
+1. **Save the LLM body to disk** at
+   `.agents/artifacts/<sessionId>_<analysisId>.md` (or `.json` for
+   JSON-output sub-skills). Keep it verbatim — that file is the
+   canonical analysis artifact.
 
-| Field | Value |
-|-------|-------|
-| Session ID | <sessionId> |
-| Stage | <stage> |
-| Environment / Org | <env> / <org> |
-| Time range | <earliest> → <latest> |
-| Analysis | <id> (sub-skills/<id>.md) |
-| Splunk rows analyzed | <N> |
-| Prompt source | sub-skills/<id>.md (upstream: <upstream.repo>@<upstream.branch>:<upstream.path>, if set) |
+2. **Render the chat snapshot** with the standard header followed by
+   an executive summary block:
 
----
+   ```markdown
+   # 🔬 Obs-Hub Analysis — <sessionId>
 
-<analysis output>
-```
+   | Field | Value |
+   |-------|-------|
+   | Session ID | <sessionId> |
+   | Stage | <stage> |
+   | Environment / Org | <env> / <org> |
+   | Time range | <earliest> → <latest> |
+   | Analysis | <id> (sub-skills/<id>.md) |
+   | Splunk rows analyzed | <N> |
+   | Prompt source | sub-skills/<id>.md (upstream: <upstream.repo>@<upstream.branch>:<upstream.path>, if set) |
 
-If the prompt produced JSON, include the raw JSON inside a fenced block AND a
-short human-readable summary above it (one paragraph). If the prompt produced
-markdown, include it verbatim under the header.
+   ---
 
-After the body, **always** append Step 7 (Splunk Links Used) and Step 8
-(What's next). Both are mandatory — see those steps for exact wording.
+   **TL;DR**
+   - 🔴 / 🟠 / 🟢  3-5 bullets max — most-actionable findings only.
+   - Each bullet ≤ 1 line, with one number for evidence.
+   - No tables here unless a single 2-column numeric table tells the
+     story more compactly than bullets would.
+
+   <Step-9 inline image goes here — see Step 9 for exact markdown.>
+   ```
+
+   Hard rules for the chat snapshot:
+   - **No more than 5 TL;DR bullets** and **no full Step Duration / Evidence /
+     Recommendations tables** in chat. Those live in the HTML.
+   - The image inserted by Step 9 IS the body of the report in chat.
+     Don't paraphrase the HTML's contents — point at it.
+   - If the sub-skill is `output: json`, render only a 1-paragraph
+     human summary as TL;DR; the JSON itself only appears in the HTML.
+
+3. **Skip the snapshot for `html_eligible: false` sub-skills** (none
+   ship today). Those still use the old behavior — full prose in chat.
+
+After the snapshot+image, **always** append Step 7 (Splunk Links Used) and
+Step 8 (What's next). Both are mandatory — see those steps for exact wording.
 
 ### Step 7 — Always output the Splunk links used (mandatory)
 
@@ -841,17 +860,16 @@ data already pulled (no new Splunk hits):
 **(b)** Start a new analysis on a different session. Reply with the
 new `sessionId` (and optional stage) and I'll pull fresh data.
 
-**(c)** Export the most recent analysis as a shareable HTML report
-(self-contained, with charts and stats). I'll write it to
-`.agents/artifacts/<sessionId>_<analysisId>.html`. Reply `c` or `html`.
-
-**(d)** File a GUS work item from the most recent analysis. I'll ask for
+**(c)** File a GUS work item from the most recent analysis. I'll ask for
 your **team name** (required) and an optional **theme**, then create the
 WI via `sfcli:gus` with the analysis output embedded in `Details__c` and
-the HTML report attached as a Salesforce File. Reply `d` or `gus`.
+the HTML report attached as a Salesforce File. Reply `c` or `gus`.
 
-Reply with `a<n>` (e.g. `a3`), `b <sessionId>`, `c`, `d`, or just the
+Reply with `a<n>` (e.g. `a3`), `b <sessionId>`, `c`, or just the
 number / ID of a sub-skill if it's unambiguous.
+
+(The HTML report + screenshot is already produced automatically — no
+separate "export" step needed. Click the image above to open it.)
 ```
 
 Rules:
@@ -867,33 +885,35 @@ Rules:
   calls.
 - Treat ambiguous answers ("anomaly", "3", "latency please") as picks for
   option (a) — match by ID or number first, free-text second.
-- Treat `c`, `html`, `export`, `export html`, `share` as picks for
-  option (c) — go to Step 9.
+- Treat `c`, `gus`, `+gus`, `file wi`, `file ticket` as picks for
+  option (c) — go to Step 10.
+- The HTML export step is no longer user-driven — it always runs in
+  Step 9 right after the analysis. If a user explicitly types `html`,
+  `+html`, `share`, etc., just point them at the screenshot already in
+  chat and the file path it links to.
 
-### Step 9 — Export HTML report (on request)
+### Step 9 — Render HTML + screenshot (default, after every analysis)
 
-Triggers (any of):
-- User included `+html`, `+report`, "html report", "shareable", or
-  "export" in their original request.
-- User picked option `(c)` in the "What's next?" menu.
-- User explicitly says "make an HTML report for that" / "export that as
-  HTML".
+This step **runs by default** after every successful analysis whose
+sub-skill is `html_eligible` (i.e. all of them today). It is **not**
+user-driven — the user does not have to ask for HTML; they get it
+automatically along with a clickable screenshot preview in chat.
+
+Skip only if the sub-skill has `html_eligible: false` (none ship today;
+flag reserved). In that case, fall back to the pre-2026-05 behavior of
+dumping full prose into chat.
 
 Behavior:
 
-1. **Check eligibility.** Read the chosen sub-skill's frontmatter:
-   if `html_eligible: false` is set, refuse politely and explain.
-   Default is eligible.
-2. **Locate inputs** (all already on disk from Steps 4-5):
-   - `<rows-file>` — the cached Splunk rows
+1. **Locate inputs** (all already on disk from Steps 4-6):
+   - `<rows-file>` — cached Splunk rows
      (`.agents/artifacts/<sessionId>_raw.json` per the
      `pulled_rows_cache_dir` config).
-   - `<analysis-file>` — write the LLM's response body to
-     `.agents/artifacts/<sessionId>_<analysisId>.md` (or `.json` for
-     JSON analyses) before invoking the renderer. If you didn't save
-     it during Step 6, save it now.
-   - `<meta-file>` — generate a small JSON containing the **exact**
-     Splunk Links Used section as a structured list:
+   - `<analysis-file>` — the LLM body, saved during Step 6 to
+     `.agents/artifacts/<sessionId>_<analysisId>.md` (or `.json`).
+   - `<meta-file>` — write the **exact** Splunk Links Used section
+     as a structured list and save to
+     `.agents/artifacts/<sessionId>_<analysisId>_meta.json`:
      ```json
      {
        "splunk_links": [
@@ -901,8 +921,10 @@ Behavior:
        ]
      }
      ```
-     Save to `.agents/artifacts/<sessionId>_<analysisId>_meta.json`.
-3. **Invoke the renderer:**
+
+2. **Render the HTML in the background, with `--no-open`.** The
+   user does not want a browser tab opening every time — they want
+   the snapshot in chat. Always pass `--no-open`:
    ```bash
    python3 ~/.claude/skills/shopper-agent-obs-hub-analyze/scripts/render_html.py \
      --session-id=<sessionId> \
@@ -914,60 +936,100 @@ Behavior:
      --analysis-id=<id> \
      --analysis-label="<label from sub-skill frontmatter>" \
      --analysis-output=markdown|json \
-     --analysis-file=<path-to-llm-output> \
-     --rows-file=<path-to-rows> \
-     --meta-file=<path-to-meta> \
+     --analysis-file=<analysis-file> \
+     --rows-file=<rows-file> \
+     --meta-file=<meta-file> \
+     --no-open \
      --out=.agents/artifacts/<sessionId>_<analysisId>.html
    ```
 
-   The renderer **opens the file in the user's default browser by
-   default** (uses `open` on macOS, `xdg-open` on Linux,
-   `os.startfile` on Windows, `webbrowser.open` as fallback). Pass
-   `--no-open` to suppress — useful when:
-   - you're rendering for a downstream attachment (Step 10's GUS
-     attach already opens it via the WI page);
-   - the user explicitly asked for a link only, not a tab;
-   - you're rendering several reports back-to-back via
-     `all-remaining` and don't want to spawn N browser tabs.
-
    ⚠️ **Use `=` syntax for every flag** (`--earliest=-7d@d`, not
-   `--earliest -7d@d`). Time values that start with `-` will otherwise
-   confuse argparse.
+   `--earliest -7d@d`). argparse otherwise treats `-`-prefixed values
+   as missing.
 
-4. **Confirm in chat** with the absolute path and a `file://` URL the
-   user can click. State that the file was opened in their default
-   browser (or that the auto-open was suppressed, if so). The file is
-   self-contained (Chart.js + marked.js are CDN; nothing else is
-   needed) and can be shared by attaching it to Slack / email.
-5. **Multiple analyses on the same session** (option `all`, or after
-   running several sub-skills in succession): when the user asks for
-   HTML, default to rendering **the most recent analysis only**. If
-   they want every analysis as HTML, render N files (one per analysis
-   ID) — confirm before producing N files.
+3. **Capture a PNG screenshot of the top of the report** via
+   headless Chrome (or qlmanage fallback):
+   ```bash
+   python3 ~/.claude/skills/shopper-agent-obs-hub-analyze/scripts/screenshot_html.py \
+     --html=.agents/artifacts/<sessionId>_<analysisId>.html \
+     --out=.agents/artifacts/<sessionId>_<analysisId>.png \
+     --width=1280 --height=900
+   ```
+   - Default viewport (1280×900) captures the standard header + the
+     first few sections, which is the right amount of "preview".
+   - Pass `--full-page` only if the user asks for a full-page
+     screenshot. The default short preview is what plays nicely in
+     chat.
+   - If the script reports the qlmanage fallback (no Chrome found),
+     warn the user once: "Snapshot quality limited — install Chrome
+     for full-fidelity previews including charts."
 
-What the renderer does (deterministic, no LLM):
-- Parses each Splunk row's `_raw` to extract operation, status, latency,
-  stages, userQuery, requestId.
-- Computes: total rows, distinct turns, unique ops, wall-clock duration,
-  failure count, max latency, status breakdown.
-- Renders 4 charts (Chart.js): Operations by type (doughnut), Latency per
-  operation (bar with avg+max), Timeline (scatter), Status breakdown
-  (doughnut, color-coded).
-- Renders an Operations table with all rows, status badges, stage
-  durations.
-- Renders the analysis body (markdown via `marked.js`, or pretty-printed
-  JSON inside a `<pre>`).
-- Renders the Splunk Links Used section as clickable links.
+4. **Display the screenshot inline + provide a click-through link.**
+   This is the chat surface's primary view of the report. The reliable
+   pattern in AI Suite / most chat renderers is **two separate
+   elements**, not a markdown `[![image](file://...)](file://...)`:
 
-The output is a single ~20-30 KB HTML file. Open via
-`file://<absolute-path>` or attach directly to Slack.
+   - **Display the PNG inline** by calling the **`Read` tool** on the
+     PNG path. Claude's `Read` of an image surfaces it visually in
+     chat. This works everywhere — `![](file://...)` does NOT
+     (most renderers block local file URIs in image src for security
+     and just show a broken-image icon).
+   - **Below the image**, render a plain markdown text link to the
+     HTML — AI Suite (and most desktop chat clients) DO follow
+     `file://` URLs in regular `[text](url)` markdown links:
+     ```markdown
+     **[📄 Open the full interactive report →](file:///abs/path/to/<sessionId>_<analysisId>.html)**
+
+     *Path (copy/paste if the link is blocked):*
+     `/abs/path/to/<sessionId>_<analysisId>.html`
+     ```
+
+   Rules:
+   - Always `Read` the PNG **before** writing the link, so the image
+     anchors above the click-through and the user reads top-to-bottom.
+   - Always use **absolute** paths — relative paths break.
+   - Always include the plain text path inside a single-backtick code
+     fence so the user can triple-click + copy if their environment
+     (Slack, locked-down browsers) blocks `file://` link clicks.
+   - **Never** use `![](file://...)` markdown image syntax. It will
+     render as a broken-image placeholder.
+
+5. **Multiple analyses on the same session.** Each sub-skill that
+   runs gets its own HTML + PNG pair. Don't overwrite an earlier
+   analysis's files — the filename includes `<analysisId>` precisely
+   so they coexist.
+
+6. **Failures are non-fatal.** If `render_html.py` or
+   `screenshot_html.py` fails, fall back to dumping the analysis prose
+   in chat (the old behavior) and surface the error in a one-line
+   note ("⚠️ HTML preview failed: <reason>. Showing full report in
+   chat instead."). Don't block the analysis output on a render error.
+
+What the HTML renderer produces (deterministic, no LLM):
+- Header with session metadata.
+- 4 charts (Chart.js): Operations by type, Latency per op (avg+max),
+  Timeline, Status breakdown.
+- Operations table with status badges + stage durations.
+- The full analysis body (markdown via marked.js, or pretty-printed JSON).
+- Splunk Links Used section.
+
+Output is a single ~20-30 KB HTML file (CDN deps for Chart.js +
+marked.js). Self-contained — drop into Slack / email and it works.
+
+#### User-typed `+html` / `share` / `export`
+
+Since HTML is now produced by default, these phrases no longer trigger
+a separate flow. Treat them as a hint to:
+- re-surface the existing image + path if the analysis already ran,
+- or proceed normally (the HTML will render in this Step 9 as part of
+  the standard flow).
 
 ### Step 10 — File GUS work item (on request)
 
 Triggers (any of):
 - User included `+gus`, `+wi`, `+ticket`, `gus wi`, `file a gus`,
   `create gus`, or `file ticket` in their original request.
-- User picked option `(d)` in the "What's next?" menu.
+- User picked option `(c)` in the "What's next?" menu.
 - User explicitly says "file this in GUS" / "make a WI for that".
 
 This step **applies to every analysis sub-skill**, not just one.
@@ -997,9 +1059,10 @@ Skip when:
    Reply with: team=<name> theme=<tag>   (or just confirm to use the candidate title)
    ```
 
-2. **Ensure HTML report exists.** If Step 9 hasn't run yet for this
-   sub-skill, run it now (silently — no need to repeat the user-facing
-   confirmation). The HTML file is required for attachment.
+2. **HTML report is already on disk.** Step 9 ran automatically right
+   after the analysis, so `.agents/artifacts/<sessionId>_<analysisId>.html`
+   should exist. If it's missing for any reason (Step 9 failure, etc.),
+   re-run the renderer now silently.
 
 3. **Build the WI fields:**
 

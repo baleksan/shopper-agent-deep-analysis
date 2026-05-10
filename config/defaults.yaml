@@ -62,6 +62,23 @@ stages:
     workflow: "Full E2E workflow (Steps 1-5)"
     accepts_session_kinds: [conversationId, botSessionId]
 
+  search:
+    description: "Search stack logs (Cimulate auto-pull + SCAPI manual paste)"
+    sister_skill: null
+    splunk_api_base_url: "https://splunk-api-noncore.log-analytics.monitoring.aws-esvc1-useast2.aws.sfdc.cl"
+    splunk_base_query: |
+      `indexes_for_distapps()` service_group=cimulate environment=qa
+        k8s_container_name="cimulate-search-api"
+        event_type="http_request_complete" uri="/api/v1/search"
+    accepts_session_kinds: [requestId, customer_id]
+    notes: |
+      Two layers: Cimulate (accessible via MCP) and SCAPI shopper-search (NOT accessible).
+      Architecture: Core agent → SCAPI shopper-search → Cimulate search-api.
+      Cimulate key fields: customer_id, request_id, latency_ms, status, bytes_out, request_body.
+      SCAPI layer (commercecloud-secure) requires manual log paste until RBAC lands in 5b.
+      Cimulate Web UI: https://splunk-web-noncore.log-analytics.monitoring.aws-esvc1-useast2.aws.sfdc.cl
+      SCAPI Web UI: same host, index=commercecloud-secure
+
   ux:
     description: "MIAW client UX rows (browser-side state, perf metrics, FailureEvents)"
     sister_skill: shopper-agent-trace-visualize
